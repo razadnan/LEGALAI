@@ -57,6 +57,59 @@ class DocumentData(_Base):
         return None
 
 
+class ClauseNode(_Base):
+    """A numbered DOCX clause mapped to inclusive, zero-based paragraph indexes."""
+
+    clause_id: str
+    number: str
+    heading: str = ""
+    text: str = ""
+    paragraph_start: int = Field(ge=0)
+    paragraph_end: int = Field(ge=0)
+    parent_id: Optional[str] = None
+    children: list["ClauseNode"] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _valid_paragraph_range(self):
+        if self.paragraph_end < self.paragraph_start:
+            raise ValueError("paragraph_end must be at least paragraph_start")
+        return self
+
+
+class ProposedEdit(_Base):
+    """An exact-text change proposal; it does not itself imply approval."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    clause_id: str
+    old_text: str
+    new_text: str
+    reason: str
+
+    @field_validator("clause_id")
+    @classmethod
+    def _clause_id_required(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("clause_id must not be empty")
+        return value
+
+    @field_validator("old_text")
+    @classmethod
+    def _old_text_required(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("old_text must not be empty")
+        return value
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_required(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("reason must not be empty")
+        return value
+
+
 # --------------------------------------------------------------------------- #
 # Developer 1 -> Developer 3 : analysis models
 # --------------------------------------------------------------------------- #

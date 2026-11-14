@@ -140,6 +140,16 @@ uses a temporary isolated backend that is removed when the command exits; it doe
 the app's persistent ChromaDB collection. The script uses the synthetic fixture only, and the
 cross-encoder is not part of the production retrieval path.
 
+## DOCX editing foundation
+
+`document_intelligence/docx_editing.py` provides clause-tree extraction and deterministic
+proposal application for DOCX drafts. Clause paragraph indexes are zero-based indexes into
+`python-docx`'s top-level `Document.paragraphs`; ranges are inclusive and stop before the next
+numbered heading. A proposal must name an existing clause and exact old text that occurs exactly
+once there. Applying a proposal writes a separate `.docx` draft, never overwrites the source, and
+does not call an LLM. PDFs remain read-only. This is a foundation utility only; approval state,
+audit persistence, and UI/API integration are not implemented yet.
+
 ## Safeguards implemented
 
 - Uploaded contracts are untrusted: `config/prompts.py` provides `wrap_untrusted()` for prompts; chat input is sanitized and instruction-like text is flagged.
