@@ -1,0 +1,31 @@
+SYNTHETIC EMPLOYMENT AGREEMENT
+Effective 1 January 2026 between Northstar Labs Ltd (the Employer) and Alex Morgan (the Employee).
+
+1. APPOINTMENT AND DUTIES
+1.1 Position. The Employer appoints the Employee as a full-time Senior Product Counsel, reporting to the Chief Operating Officer, beginning on the Effective Date.
+1.2 Exclusivity. The Employee shall devote full working time and attention to the Employer and shall not take other employment, consultancy, or advisory work without the Employer's prior written consent.
+
+2. COMPENSATION AND BENEFITS
+2.1 Base Salary. The Employer shall pay gross annual salary of INR 1,200,000 in twelve equal monthly instalments of INR 100,000 on or before the last working day of each month, subject to statutory tax deductions.
+2.2 Performance Bonus. The Employee may be eligible for an annual performance bonus of up to 10% of gross annual salary. The Employer's Board decides whether to award and pay a bonus; no bonus is guaranteed.
+2.3 Leave and Expenses. The Employee is entitled to 24 days of paid annual leave per calendar year. The Employer reimburses pre-approved business travel expenses after the Employee submits valid invoices.
+
+3. PROBATION
+3.1 Probation and Notice. The first six months from the Effective Date are probation. During probation, either party may terminate the Agreement with 7 days' written notice or payment of base salary in lieu of notice.
+
+4. CONFIDENTIALITY AND INTELLECTUAL PROPERTY
+4.1 Confidentiality. During and after employment, the Employee shall not disclose or use the Employer's confidential information, trade secrets, client lists, algorithms, or financial records. On termination, the Employee shall immediately return all company materials, laptops, and documents.
+4.2 Inventions. All works, software, legal templates, workflows, and inventions created by the Employee within the scope of employment are the Employer's exclusive intellectual property.
+
+\f
+5. POST-TERMINATION RESTRICTIONS
+5.1 Non-Compete. For twelve months after termination, the Employee shall not directly or indirectly work for, advise, or hold an interest in a direct competitor of the Employer anywhere in India.
+5.2 Non-Solicitation. For twelve months after termination, the Employee shall not solicit or entice away any employee, contractor, or enterprise client of the Employer.
+
+6. TERMINATION
+6.1 Termination Without Cause. After successful completion of probation, either party may terminate the Agreement without cause by giving 30 days' written notice or paying 30 days of base salary in lieu of notice.
+6.2 Summary Dismissal. The Employer may terminate the Agreement immediately without notice or payment in lieu if the Employee commits gross misconduct, fraud, wilful disobedience, or a material breach of company policy.
+
+7. GOVERNING LAW AND ENTIRE AGREEMENT
+7.1 Governing Law. Indian law governs this Agreement. Courts in Bengaluru, Karnataka have exclusive jurisdiction over disputes arising from it.
+7.2 Entire Agreement. This Agreement is the entire understanding between the parties and supersedes prior negotiations and representations. An amendment must be in writing and signed by both parties.

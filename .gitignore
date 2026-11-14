@@ -1,0 +1,15 @@
+.env
+.env.local
+__pycache__/
+*.pyc
+*.bak
+.pytest_cache/
+.venv/
+node_modules/
+.next/
+*.tsbuildinfo
+storage/uploads/*
+storage/processed/*
+storage/vector_db/*
+storage/reports/*
+!storage/*/.gitkeep

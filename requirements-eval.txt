@@ -1,0 +1,2 @@
+# Optional local-only dependency for cross-encoder retrieval experiments.
+sentence-transformers>=4.1,<6
