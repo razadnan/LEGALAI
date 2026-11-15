@@ -37,6 +37,21 @@ def test_qa_returns_verified_sources_with_page_and_clause(runtime, docx_bytes):
     assert r.answer.sources[0].clause == "8" and "30 days" in r.answer.sources[0].text
 
 
+def test_chat_follow_up_uses_previous_question_as_context(runtime, docx_bytes):
+    a, _ = _upload(runtime, docx_bytes)
+    r = run_workflow(
+        "qa",
+        [a.document_id],
+        "What about that?",
+        chat_history=[
+            {"role": "user", "content": "What is the notice period?"},
+            {"role": "assistant", "content": "Either party may terminate with 30 days notice."},
+        ],
+        runtime=runtime,
+    )
+    assert r.answer.sources and r.answer.sources[0].clause == "8"
+
+
 def test_clause_reference_question(runtime, docx_bytes):
     a, _ = _upload(runtime, docx_bytes)
     r = run_workflow("auto", [a.document_id], "Explain clause 10", runtime=runtime)
@@ -177,13 +192,14 @@ def test_legal_document_question_is_allowed(runtime, docx_bytes):
     assert r.answer.sources
 
 
-def test_real_services_resolution_and_pipeline(tmp_path, docx_bytes):
+def test_real_services_resolution_and_pipeline(tmp_path, docx_bytes, monkeypatch):
     from config.settings import Settings
     from core.state import DocumentRegistry
     from orchestration.adapters import Services
     from orchestration.supervisor import SupervisorGraph
     from orchestration.workflow import _Runtime
 
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "local")
     services = Services(prefer_real=True)
     assert not services.uses_fallback
     assert all(not status.startswith("fallback") for status in services.status.values())

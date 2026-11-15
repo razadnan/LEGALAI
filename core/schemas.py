@@ -219,8 +219,19 @@ class RiskFinding(_Base):
     @property
     def evidence_text(self) -> str:
         if isinstance(self.evidence, list):
-            parts = [getattr(e, "text", str(e)) for e in self.evidence if getattr(e, "text", str(e))]
+            parts = []
+            for e in self.evidence:
+                if isinstance(e, dict):
+                    t = e.get("text", "")
+                else:
+                    t = getattr(e, "text", None)
+                    if t is None:
+                        t = str(e) if not isinstance(e, dict) else ""
+                if t:
+                    parts.append(str(t))
             return " ".join(parts)
+        if isinstance(self.evidence, dict):
+            return str(self.evidence.get("text", ""))
         return str(self.evidence or "")
 
     @model_validator(mode="before")
@@ -325,6 +336,7 @@ class AnswerResult(_Base):
     grounded: bool = True
     mode: str = "llm"
     warnings: list[str] = Field(default_factory=list)
+    agents_invoked: list[str] = Field(default_factory=list)
 
 
 Answer = AnswerResult

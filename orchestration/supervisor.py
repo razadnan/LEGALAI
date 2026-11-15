@@ -6,6 +6,8 @@ node functions, so the app keeps working (``engine`` reports which is active).
 """
 from __future__ import annotations
 
+import json
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +22,7 @@ from core.state import DocumentRegistry
 from orchestration.adapters import Services
 from orchestration.verification import verify_risks, verify_sources
 
+logger = logging.getLogger(__name__)
 AGENT_NODES = ("document_agent", "risk_agent", "rag_agent", "comparison_agent", "report_generator")
 
 _INJECTION_PATTERNS = [
@@ -32,6 +35,8 @@ _INJECTION_PATTERNS = [
 class AgentState(TypedDict, total=False):
     task: str
     question: Optional[str]
+    chat_history: list[dict[str, str]]
+    simple_language: bool
     document_ids: list[str]
     intent: str
     plan: list[str]
@@ -79,6 +84,33 @@ def resolve_intent(task: str, question: Optional[str], n_documents: int) -> Task
     except ValueError:  # free-text request such as "Summarize this contract"
         text = f"{task} {question or ''}"
     return classify_intent(text, n_documents)
+
+
+def classify_intent_with_llm(text: str, n_documents: int) -> Optional[TaskType]:
+    """Classify an automatic request with the configured LLM; return None to use rules."""
+    from rag_engine.llm import get_llm
+
+    try:
+        llm = get_llm()
+        if llm is None:
+            return None
+        system_prompt = (
+            "Classify the user's request about an uploaded legal document. "
+            "Return JSON only with one field, intent, whose value is one of "
+            "qa, summarize, risk, compare, report. Use compare only when at least two "
+            "documents are available; with one document, choose qa or another applicable intent."
+        )
+        user_prompt = json.dumps({"question": text, "document_count": n_documents}, ensure_ascii=True)
+        raw = llm(system_prompt, user_prompt)
+        match = re.search(r"\{.*\}", raw or "", re.S)
+        value = json.loads(match.group(0)).get("intent") if match else None
+        if value not in {item.value for item in TaskType if item is not TaskType.AUTO}:
+            logger.warning("LLM intent classification returned an invalid result; using rule-based routing.")
+            return None
+        return TaskType(value)
+    except Exception as exc:
+        logger.warning("LLM intent classification failed (%s); using rule-based routing.", type(exc).__name__)
+        return None
 
 
 def build_plan(intent: TaskType, n_documents: int, has_question: bool) -> list[str]:
@@ -247,7 +279,13 @@ class SupervisorGraph:
             if missing:
                 raise InvalidRequestError(f"missing {missing}",
                                           user_message=f"Document(s) not found: {', '.join(missing)}. Please upload again.")
-            intent = resolve_intent(state.get("task", ""), question, len(ids))
+            task = state.get("task", "")
+            if task.strip().lower() == TaskType.AUTO.value and question:
+                intent = classify_intent_with_llm(question, len(ids))
+                if intent is None:
+                    intent = classify_intent(question, len(ids))
+            else:
+                intent = resolve_intent(task, question, len(ids))
             if intent is TaskType.COMPARE and len(ids) < 2:
                 raise InvalidRequestError("compare needs 2 docs",
                                           user_message="Comparison needs two documents. Upload a second version first.")
@@ -292,7 +330,12 @@ class SupervisorGraph:
         if doc.document_id not in self._indexed:  # index lazily, once per session
             self.services.index_document(doc)
             self._indexed.add(doc.document_id)
-        answer = self.services.answer_question(doc.document_id, question)
+        answer = self.services.answer_question(
+            doc.document_id,
+            question,
+            chat_history=state.get("chat_history", []),
+            simple_language=state.get("simple_language", False),
+        )
         sources, warns = verify_sources(answer.sources, doc)
         if not sources and "could not find" not in answer.answer.lower():
             warns.append("The answer has no supporting sources - do not rely on it without checking the document.")

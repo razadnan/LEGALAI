@@ -101,9 +101,8 @@ def render() -> None:
             if section_states.get("Summary & parties"):
                 preview_lines.append("<b>Summary</b>")
                 if analysis and analysis.document_type:
-                    parties = ", ".join(
-                        getattr(p, "name", str(p)) for p in (analysis.parties or [])
-                    )
+                    # parties is list[str] after schema coercion; items may be "Name (Role)"
+                    parties = ", ".join(str(p) for p in (analysis.parties or []))
                     preview_lines.append(
                         f"{analysis.document_type} between {parties or 'parties not identified'}."
                     )

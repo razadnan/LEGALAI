@@ -65,7 +65,7 @@ RULES: list[Rule] = [
          "Can this right be limited to defined causes, or made mutual, with a minimum notice period?",
          _terminate),
     Rule("non_compete", "Post-termination non-compete restriction", "non_compete", "medium",
-         r"non-?\s?compet\w*|not\s+(?:to\s+)?(?:directly\s+or\s+indirectly\s+)?(?:engage|be\s+engaged|work|compete|carry\s+on)[^.]{0,120}compet",
+         r"non-?\s?compet\w*|restraint\s+of\s+trade|(?:shall\s+not|not\s+to|agrees?\s+not\s+to)[^.]{0,100}?(?:work|engage|be\s+engaged|provide\s+services|compete|carry\s+on)[^.]{0,120}?(?:compet\w*|business)",
          "Restricts future work after the relationship ends. Long duration or wide geography can "
          "limit livelihood and may be unenforceable depending on the jurisdiction.",
          "Is the duration, geography and scope of the restriction reasonable and enforceable here?",
@@ -112,8 +112,8 @@ RULES: list[Rule] = [
          "rules and effectively lower hourly pay.",
          "Are working hours and overtime treatment defined and consistent with applicable law?"),
     Rule("discretionary_pay", "Discretionary bonus / incentive", "payment", "medium",
-         r"(?:bonus|incentive|commission)[^.]{0,150}?(?:sole|absolute)\s+discretion",
-         "A bonus at the payer's sole discretion is not guaranteed, so it should not be relied "
+         r"(?:bonus|incentive|commission|variable\s+pay)[^.]{0,150}?(?:sole|absolute\s+discretion|discretionary)",
+         "A bonus or variable pay at the payer's discretion is not guaranteed, so it should not be relied "
          "on as part of expected compensation.",
          "Can bonus criteria and timing be written down objectively?"),
     Rule("penalty_or_bond", "Penalty, forfeiture, or service-bond terms", "payment", "medium",
@@ -165,6 +165,10 @@ def find_risks(ctx: Context) -> list[RiskFinding]:
     seen: set[tuple[str, str]] = set()
 
     for u in ctx.units:
+        # Ignore boilerplate units (signatures, demo disclaimers, recitals)
+        if re.search(r"\b(?:demo note|signatures?|in witness whereof|signed by|signature\s*:)\b", u.text, re.I):
+            continue
+
         for rule, rx in _COMPILED:
             m = rx.search(u.text)
             if not m:
@@ -178,10 +182,11 @@ def find_risks(ctx: Context) -> list[RiskFinding]:
             if key in seen:
                 continue
             seen.add(key)
+            c_label = u.clause_id if (u.clause_id and u.clause_id != "preamble") else ""
             findings.append(RiskFinding(
-                risk_id="", title=rule.title, severity=sev, category=rule.category,
+                risk_id="", clause=c_label, title=rule.title, severity=sev, category=rule.category,
                 explanation=rule.explanation, suggested_question=rule.question,
-                evidence=[ctx.evidence(u)]))
+                page=u.page, evidence=[ctx.evidence(u)]))
 
     # notice period checks (parsed numbers, so not a plain regex rule)
     for n in find_notice_periods(ctx):
@@ -201,8 +206,9 @@ def find_risks(ctx: Context) -> list[RiskFinding]:
         key = ("notice", u.clause_id)
         if key not in seen:
             seen.add(key)
-            findings.append(RiskFinding(risk_id="", title=title, severity=sev, category="termination",
-                                        explanation=why, suggested_question=q, evidence=[ctx.evidence(u)]))
+            c_label = u.clause_id if (u.clause_id and u.clause_id != "preamble") else ""
+            findings.append(RiskFinding(risk_id="", clause=c_label, title=title, severity=sev, category="termination",
+                                        explanation=why, suggested_question=q, page=u.page, evidence=[ctx.evidence(u)]))
 
     # missing clauses (only for document types where we know what to expect)
     present = {c.category for c in ctx.clauses if c.text}

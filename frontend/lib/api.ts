@@ -86,6 +86,12 @@ export interface AnswerResult {
   grounded: boolean;
   mode: string;
   warnings: string[];
+  agents_invoked: string[];
+}
+
+export interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
 }
 
 export interface ComparisonChange {
@@ -179,13 +185,19 @@ export function getRisks(documentId: string): Promise<RiskFinding[]> {
 export function askQuestion(
   documentId: string,
   question: string,
+  history: ChatTurn[] = [],
+  simpleLanguage = false,
 ): Promise<AnswerResult> {
   return request<AnswerResult>(
     `/api/documents/${encodeURIComponent(documentId)}/chat`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({
+        question,
+        history: history.slice(-6),
+        simple_language: simpleLanguage,
+      }),
     },
   );
 }

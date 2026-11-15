@@ -212,12 +212,27 @@ def _tokens(text: str) -> set[str]:
     return {t for t in re.findall(r"[a-z0-9]+", text.lower()) if t not in STOPWORDS and len(t) > 1}
 
 
-def answer_question(document_id: str, question: str) -> AnswerResult:
+def answer_question(
+    document_id: str,
+    question: str,
+    chat_history: list[dict[str, str]] | None = None,
+) -> AnswerResult:
     doc = _INDEX.get(document_id)
     if doc is None:
         raise AgentError(f"{document_id} is not indexed", user_message="The document is not indexed yet.")
     units = split_clauses(doc)
-    q_tokens = _tokens(question)
+    retrieval_question = question
+    latest_user_question = next(
+        (item["content"] for item in reversed(chat_history or []) if item.get("role") == "user" and item.get("content")),
+        "",
+    )
+    if latest_user_question and re.search(
+        r"\b(it|that|this|they|them|those|these|there|same)\b|^(?:what about|and|why|how so|explain it)\b",
+        question.strip(),
+        re.I,
+    ):
+        retrieval_question = f"{latest_user_question} {question}"
+    q_tokens = _tokens(retrieval_question)
     wanted = CLAUSE_QUERY_RE.search(question)
     scored = []
     for u in units:

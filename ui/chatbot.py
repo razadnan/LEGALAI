@@ -56,7 +56,7 @@ def render() -> None:
             if cols[i % 2].button(ex, key=f"ex_{i}", use_container_width=True):
                 history.append({"role": "user", "content": ex})
                 with st.spinner("Thinking…"):
-                    result = run_workflow("auto", [doc_id], ex)
+                    result = run_workflow("auto", [doc_id], ex, chat_history=history[:-1])
                 history.append({"role": "assistant", "content": result.message, "result": result})
                 st.rerun()
 
@@ -89,7 +89,7 @@ def render() -> None:
             st.write(prompt)
         with st.chat_message("assistant"):
             with st.spinner("Searching clauses…"):
-                result = run_workflow("auto", [doc_id], prompt)
+                result = run_workflow("auto", [doc_id], prompt, chat_history=history[:-1])
             _render_result(result)
         history.append({"role": "assistant", "content": result.message, "result": result})
 

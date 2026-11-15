@@ -77,7 +77,11 @@ def render_risks(risks: list[RiskFinding]) -> None:
     for r in risks:
         sev = r.severity.lower()
         sev_badge = f'<span class="lm-sev lm-sev-{sev}">{sev.upper()}</span>'
-        clause_label = f"Clause {r.clause}" if r.clause else "Flagged clause"
+        clause_no = str(r.clause or "").replace("Clause", "").strip()
+        has_valid_clause = bool(clause_no and clause_no != r.title and len(clause_no) <= 10)
+        clause_prefix = f"Clause {clause_no}: " if has_valid_clause else ""
+        title_text = r.title or r.clause or "Risk"
+        clause_label = f"Clause {clause_no}" if has_valid_clause else "Flagged clause"
         page_label = f" · p.{r.page}" if r.page else ""
         explanation = r.explanation or ""
 
@@ -106,7 +110,7 @@ def render_risks(risks: list[RiskFinding]) -> None:
 
         st.markdown(
             f'<div class="lm-card lm-risk lm-risk-{sev}">'
-            f'<div class="lm-row"><b>{r.clause or "Risk"}</b>{sev_badge}</div>'
+            f'<div class="lm-row"><b>{clause_prefix}{title_text}</b>{sev_badge}</div>'
             f'<p style="margin:6px 0;">{explanation}</p>'
             f'{ev_html}'
             f'{lawyer_q}'
@@ -142,10 +146,19 @@ def render_analysis(a: DocumentAnalysis) -> None:
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("**Parties**")
-            for p in (a.parties or ["Not identified"]):
-                name = getattr(p, "name", str(p))
-                role = getattr(p, "role", "")
-                st.markdown(f"- **{role}:** {name}" if role else f"- {name}")
+            if a.parties:
+                for p in a.parties:
+                    # parties is list[str] after schema coercion; items may be "Name (Role)"
+                    p_str = str(p)
+                    import re as _re
+                    m = _re.match(r"^(.+?)\s+\((.+?)\)\s*$", p_str)
+                    if m:
+                        name_part, role_part = m.group(1).strip(), m.group(2).strip()
+                        st.markdown(f"- **{role_part}:** {name_part}")
+                    else:
+                        st.markdown(f"- {p_str}")
+            else:
+                st.markdown("- Not identified")
         with col2:
             st.markdown("**Key dates**")
             if a.important_dates:

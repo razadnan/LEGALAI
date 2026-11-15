@@ -96,10 +96,14 @@ def process_upload(filename: str, data: bytes, *, runtime: Optional[_Runtime] = 
 
 
 def run_workflow(task: str, document_ids: list[str], question: Optional[str] = None, *,
-                 runtime: Optional[_Runtime] = None) -> WorkflowResult:
+                 runtime: Optional[_Runtime] = None,
+                 chat_history: Optional[list[dict[str, str]]] = None,
+                 simple_language: bool = False) -> WorkflowResult:
     """Run the supervisor. ``task`` is a TaskType value ("auto" classifies the question) or a free-text request."""
     rt = runtime or get_runtime()
     state: AgentState = {"task": task, "document_ids": list(document_ids or []), "question": question,
+                         "chat_history": list(chat_history or [])[-6:],
+                         "simple_language": simple_language,
                          "errors": [], "warnings": []}
     try:
         return rt.graph.invoke(state)["result"]

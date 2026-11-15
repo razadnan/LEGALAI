@@ -16,6 +16,11 @@ except ImportError:  # pragma: no cover
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def is_configured_api_key(value: str | None) -> bool:
+    key = (value or "").strip().lower()
+    return bool(key and not key.startswith(("your-", "your_", "sk-your")))
+
+
 @dataclass
 class Settings:
     app_title: str = "LegalMind AI"
@@ -38,13 +43,11 @@ class Settings:
 
     @property
     def has_gemini_key(self) -> bool:
-        k = (self.gemini_api_key or "").strip()
-        return bool(k and not k.startswith("your-") and not k.startswith("sk-your"))
+        return is_configured_api_key(self.gemini_api_key)
 
     @property
     def has_openai_key(self) -> bool:
-        k = (self.openai_api_key or "").strip()
-        return bool(k and not k.startswith("sk-your") and not k.startswith("your-"))
+        return is_configured_api_key(self.openai_api_key)
 
     @property
     def has_api_key(self) -> bool:
@@ -53,10 +56,10 @@ class Settings:
     @property
     def active_provider(self) -> str:
         prov = self.llm_provider.lower()
-        if prov in ("gemini", "google") and self.has_gemini_key:
-            return "gemini"
-        if prov == "openai" and self.has_openai_key:
-            return "openai"
+        if prov in ("gemini", "google"):
+            return "gemini" if self.has_gemini_key else "none"
+        if prov == "openai":
+            return "openai" if self.has_openai_key else "none"
         if self.has_gemini_key:
             return "gemini"
         if self.has_openai_key:

@@ -62,8 +62,15 @@ class UploadResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=2000)
+
+
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
+    history: list[ChatTurn] = Field(default_factory=list, max_length=6)
+    simple_language: bool = False
 
 
 class CompareResponse(BaseModel):
@@ -95,8 +102,20 @@ async def validation_error_handler(_request: Request, exc: RequestValidationErro
     return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 
-def _workflow(task: str, document_ids: list[str], question: Optional[str] = None) -> WorkflowResult:
-    result = run_workflow(task, document_ids, question)
+def _workflow(
+    task: str,
+    document_ids: list[str],
+    question: Optional[str] = None,
+    chat_history: Optional[list[dict[str, str]]] = None,
+    simple_language: bool = False,
+) -> WorkflowResult:
+    result = run_workflow(
+        task,
+        document_ids,
+        question,
+        chat_history=chat_history,
+        simple_language=simple_language,
+    )
     if result.errors:
         raise HTTPException(status_code=422, detail=result.errors)
     return result
@@ -296,11 +315,24 @@ async def overview(document_id: str) -> DocumentAnalysis:
 async def chat(document_id: str, body: ChatRequest) -> AnswerResult:
     _get_document(document_id)
     result = await run_in_threadpool(
-        _workflow, "qa", [document_id], body.question
+        _workflow,
+        "auto",
+        [document_id],
+        body.question,
+        [turn.model_dump() for turn in body.history],
+        body.simple_language,
     )
-    if result.answer is None:
+    if result.answer is not None:
+        return result.answer.model_copy(update={"agents_invoked": result.agents_invoked})
+    if not result.message:
         raise HTTPException(status_code=422, detail="No answer was produced.")
-    return result.answer
+    return AnswerResult(
+        answer=result.message,
+        grounded=False,
+        mode=result.intent or "workflow",
+        warnings=[*result.warnings, "This response has no supporting chat citation."],
+        agents_invoked=result.agents_invoked,
+    )
 
 
 @app.get(

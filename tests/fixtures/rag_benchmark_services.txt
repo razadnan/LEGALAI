@@ -1,0 +1,30 @@
+SYNTHETIC PROFESSIONAL SERVICES AGREEMENT
+Effective 1 May 2026 between Lumen Health Group Inc (Client) and Orbit Consulting LLC (Provider).
+
+1. Services
+The Provider shall deliver the data migration and staff training described in Statement of Work 1. The Provider shall supply monthly progress reports.
+
+2. Fees
+The Client shall pay a fixed project fee of USD 48,000, payable in four equal milestone payments of USD 12,000 after written acceptance of each milestone.
+
+3. Invoices and Expenses
+Invoices are due within thirty days after receipt. The Client reimburses reasonable travel expenses only when approved in writing in advance and supported by receipts.
+
+4. Term and Renewal
+This Agreement begins on 1 May 2026 and continues for one year. It renews for successive one-year periods unless either party gives sixty days' written notice of non-renewal.
+
+\f
+5. Confidentiality
+Each party shall protect the other party's confidential information and use it only to perform or receive the Services. These duties continue for five years after termination.
+
+6. Work Product
+After full payment, the Client owns the final reports and deliverables specifically created under the Statement of Work. The Provider retains ownership of its pre-existing tools and methods.
+
+7. Liability
+Neither party is liable for indirect or consequential damages. Each party's aggregate liability is capped at the fees paid or payable in the twelve months before the claim, except for fraud or wilful misconduct.
+
+8. Termination
+Either party may terminate for material breach not cured within thirty days after written notice. The Client shall pay for Services completed through the termination date.
+
+9. Governing Law
+New York law governs this Agreement, and state and federal courts in New York County have exclusive jurisdiction.

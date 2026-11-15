@@ -57,9 +57,16 @@ def verify_sources(sources: list[Source], doc: DocumentData) -> tuple[list[Sourc
 def verify_risks(risks: list[RiskFinding], doc: DocumentData) -> tuple[list[RiskFinding], list[str]]:
     out, unverified = [], 0
     for r in risks:
-        ev_text = r.evidence_text if hasattr(r, "evidence_text") else str(r.evidence or "")
-        ok = verify_text(ev_text, r.page, doc) if ev_text else False
+        # evidence_text is a @property that handles list[Evidence] and plain str correctly
+        ev_text = r.evidence_text
+        # Only try to verify non-trivial evidence text
+        if ev_text and len(ev_text.strip()) >= 15:
+            ok = verify_text(ev_text, r.page, doc)
+        else:
+            # Missing-clause findings have no evidence quote by design; mark as None (unknown)
+            ok = None if r.finding_type == "missing_clause" else False
         out.append(r.model_copy(update={"verified": ok}))
-        unverified += not ok
+        if ok is False:
+            unverified += 1
     warnings = [f"{unverified} risk finding(s) have evidence that could not be verified in the document."] if unverified else []
     return out, warnings

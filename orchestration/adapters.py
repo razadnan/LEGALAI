@@ -10,7 +10,8 @@ Expected real interfaces (agree on these on Day 1):
   document_intelligence.document_agent.analyze_document(document_data: dict) -> dict
   document_intelligence.risk_analyzer.analyze_risks(document_data: dict) -> list[dict]
   rag_engine.retrieval.index_document(document_data: dict) -> None
-  rag_engine.chat_engine.answer_question(document_id: str, question: str) -> dict
+  rag_engine.chat_engine.answer_question(document_id: str, question: str, chat_history=None,
+                                         simple_language=False) -> dict
   rag_engine.comparison_agent.compare_documents(doc_a: dict, doc_b: dict) -> dict
 """
 from __future__ import annotations
@@ -61,9 +62,9 @@ class Services:
             self.status[name] = status
 
     # -- helpers --------------------------------------------------------------
-    def _call_real(self, name: str, *args: Any) -> Any:
+    def _call_real(self, name: str, *args: Any, **kwargs: Any) -> Any:
         try:
-            return self._real[name](*args)
+            return self._real[name](*args, **kwargs)
         except LegalMindError:
             raise
         except Exception as exc:  # real module bug / API failure: surface it clearly
@@ -100,10 +101,24 @@ class Services:
         if self._real["index_document"]:
             self._call_real("index_document", _dump(doc))
 
-    def answer_question(self, document_id: str, question: str) -> AnswerResult:
+    def answer_question(
+        self,
+        document_id: str,
+        question: str,
+        chat_history: Optional[list[dict[str, str]]] = None,
+        simple_language: bool = False,
+    ) -> AnswerResult:
         if self._real["answer_question"]:
-            return AnswerResult.model_validate(self._call_real("answer_question", document_id, question))
-        return fallbacks.answer_question(document_id, question)
+            return AnswerResult.model_validate(
+                self._call_real(
+                    "answer_question",
+                    document_id,
+                    question,
+                    chat_history=chat_history,
+                    simple_language=simple_language,
+                )
+            )
+        return fallbacks.answer_question(document_id, question, chat_history=chat_history)
 
     def compare_documents(self, doc_a: DocumentData, doc_b: DocumentData) -> ComparisonResult:
         if self._real["compare_documents"]:

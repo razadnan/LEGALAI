@@ -2,7 +2,14 @@
 import pytest
 
 from core.schemas import DocumentData, Page, RiskFinding, Source, TaskType
-from orchestration.supervisor import build_plan, classify_intent, resolve_intent, sanitize_question, next_node
+from orchestration.supervisor import (
+    build_plan,
+    classify_intent,
+    classify_intent_with_llm,
+    resolve_intent,
+    sanitize_question,
+    next_node,
+)
 from orchestration.verification import verify_risks, verify_sources
 
 
@@ -25,6 +32,45 @@ def test_explicit_task_wins_and_auto_uses_question():
     assert resolve_intent("risk", "anything", 1) == TaskType.RISK
     assert resolve_intent("auto", "Who are the parties?", 1) == TaskType.SUMMARIZE
     assert resolve_intent("Summarize this contract", None, 1) == TaskType.SUMMARIZE
+
+
+def test_llm_intent_classification_accepts_known_intents_and_falls_back(monkeypatch):
+    import rag_engine.llm
+
+    monkeypatch.setattr(
+        rag_engine.llm,
+        "get_llm",
+        lambda: lambda _system, _prompt: '{"intent":"risk"}',
+    )
+    assert classify_intent_with_llm("What should be reviewed?", 1) is TaskType.RISK
+
+    monkeypatch.setattr(
+        rag_engine.llm,
+        "get_llm",
+        lambda: lambda _system, _prompt: '{"intent":"unknown"}',
+    )
+    assert classify_intent_with_llm("What should be reviewed?", 1) is None
+
+
+def test_auto_routing_uses_llm_intent(monkeypatch):
+    from orchestration.supervisor import SupervisorGraph
+
+    class Registry:
+        def exists(self, _document_id):
+            return True
+
+    monkeypatch.setattr(
+        "orchestration.supervisor.classify_intent_with_llm",
+        lambda _question, _count: TaskType.RISK,
+    )
+    graph = SupervisorGraph(services=None, registry=Registry())
+    state = graph._classify({
+        "task": "auto",
+        "question": "What should be reviewed?",
+        "document_ids": ["DOC001"],
+    })
+    assert state["intent"] == TaskType.RISK.value
+    assert state["plan"] == ["document_agent", "risk_agent"]
 
 
 def test_plans():

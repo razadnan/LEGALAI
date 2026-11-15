@@ -14,6 +14,7 @@ import time
 import zlib
 from typing import List, Protocol
 
+from config.settings import is_configured_api_key
 from core.exceptions import LLMError
 from rag_engine.text_utils import tokenize
 
@@ -128,18 +129,23 @@ def get_embedder(provider: str | None = None) -> Embedder:
     if provider == "local":
         return HashingEmbedder()
     if provider in ("gemini", "google"):
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
+        if not is_configured_api_key(api_key):
+            raise LLMError("Gemini embeddings require a valid GEMINI_API_KEY or GOOGLE_API_KEY.")
         return GeminiEmbedder()
     if provider == "openai":
+        if not is_configured_api_key(os.getenv("OPENAI_API_KEY")):
+            raise LLMError("OpenAI embeddings require a valid OPENAI_API_KEY.")
         return OpenAIEmbedder()
     # auto
     gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if gemini_key and not gemini_key.startswith("your-") and not gemini_key.startswith("sk-your"):
+    if is_configured_api_key(gemini_key):
         try:
             return GeminiEmbedder(api_key=gemini_key)
         except Exception:
             pass
     openai_key = os.getenv("OPENAI_API_KEY", "")
-    if openai_key and not openai_key.startswith("sk-your"):
+    if is_configured_api_key(openai_key):
         try:
             return OpenAIEmbedder()
         except Exception:

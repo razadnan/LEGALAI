@@ -8,6 +8,7 @@ import {
   getRisks,
   uploadDocument,
   type AnswerResult,
+  type ChatTurn,
   type ComparisonResult,
   type DocumentAnalysis,
   type RiskFinding,
@@ -100,9 +101,13 @@ export default function Home() {
   }, []);
 
   const onAsk = useCallback(
-    (question: string): Promise<AnswerResult> => {
+    (
+      question: string,
+      history: ChatTurn[],
+      simpleLanguage: boolean,
+    ): Promise<AnswerResult> => {
       if (!document) return Promise.reject(new Error("Upload a document first."));
-      return askQuestion(document.document_id, question);
+      return askQuestion(document.document_id, question, history, simpleLanguage);
     },
     [document],
   );

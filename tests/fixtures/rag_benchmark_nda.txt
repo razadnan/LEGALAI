@@ -1,0 +1,27 @@
+SYNTHETIC NON-DISCLOSURE AGREEMENT
+Effective 1 March 2026 between Cedar Analytics Ltd (Disclosing Party) and Rowan Systems Inc (Receiving Party).
+
+1. Definition of Confidential Information
+Confidential Information means non-public technical, commercial, financial, customer, and product information disclosed in any form, including forecasts and source code.
+
+2. Receiving Party Duties
+The Receiving Party shall use Confidential Information only to evaluate a proposed business relationship and shall protect it with at least reasonable care. Disclosure is permitted only to employees who need to know and are bound by confidentiality duties.
+
+3. Exclusions
+Confidential Information does not include information that becomes public without breach, was already lawfully known, is independently developed, or is received lawfully from a third party.
+
+4. Required Disclosure
+If disclosure is required by law, the Receiving Party shall give prompt written notice where legally permitted and disclose only the portion legally required.
+
+\f
+5. Term
+This Agreement begins on the Effective Date. The confidentiality obligations continue for three years after each disclosure.
+
+6. Return or Destruction
+Within ten days after a written request, the Receiving Party shall return or destroy Confidential Information and certify destruction in writing, except for one archival copy retained by counsel.
+
+7. No License
+No intellectual-property license is granted except the limited right to evaluate the proposed relationship.
+
+8. Governing Law
+This Agreement is governed by the laws of Ontario, Canada, and the courts in Toronto have exclusive jurisdiction.

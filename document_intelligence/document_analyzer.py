@@ -279,6 +279,14 @@ _ROLE_PAREN = re.compile(r"\(\s*(?:hereinafter\s+)?(?:referred\s+to\s+as\s+)?(?:
 _NAME_CUT = re.compile(r",\s*(?:a|an|having|incorporated|residing|located|whose|with|of|S/o|D/o|W/o)\b|\s+\(|,\s*$", re.I)
 
 
+def clean_party_name(name: str) -> str:
+    """Strip preamble phrases, numbering, and punctuation from extracted party names."""
+    n = re.sub(r"^(?:the\s+following\s+parties:?|the\s+parties:?|between:?|among:?)\s*", "", name.strip(), flags=re.I)
+    n = re.sub(r"^(?:(?:party\s+[12ab]|first\s+party|second\s+party)[:\s-]*|(?:\(?\d+\)?|\(?[a-z]\)|\(?[ivx]+\))[.\s-]*)\s*", "", n, flags=re.I)
+    n = re.sub(r"^(?:and|&)\s+", "", n, flags=re.I)
+    return n.strip(" ,;:\"'")
+
+
 def extract_parties(ctx: Context) -> list[Party]:
     pre = "\n".join(p.text for p in ctx.doc.pages[:2])
     pre = re.sub(r"\s+", " ", pre)[:4000]
@@ -292,14 +300,36 @@ def extract_parties(ctx: Context) -> list[Party]:
         if re.search(r"\bbetween\b", seg, re.I):
             seg = re.split(r"\bbetween\b", seg, flags=re.I)[-1]
         seg = re.sub(r"^[\s,;]*(?:and|&)\s+", "", seg.strip(), flags=re.I)
-        name = _NAME_CUT.split(seg.strip(), maxsplit=1)[0].strip(" ,;\"'")
+        raw_name = _NAME_CUT.split(seg.strip(), maxsplit=1)[0].strip(" ,;\"'")
+        name = clean_party_name(raw_name)
         if 3 <= len(name) <= 100:
             parties.append(Party(name=name, role=role.title(),
                                  evidence=_pre_evidence(ctx, name)))
     if not parties:
+        # Check for tabular / key-value format e.g. "Employer Acme Technologies Pvt Ltd" or "Employer: Acme..."
+        roles = ["employer", "employee", "company", "client", "contractor", "consultant", "service provider",
+                 "vendor", "supplier", "landlord", "tenant", "lessor", "lessee", "licensor", "licensee"]
+        role_pat = r"(?:" + "|".join(roles) + r")"
+        non_party_verbs = {"hereby", "shall", "must", "appoints", "pay", "pays", "devote", "agrees", "entitled", "reporting", "commencing", "party", "name", "registered"}
+        table_matches = re.finditer(
+            rf"\b({role_pat})[:\s]+([A-Z][A-Za-z0-9 .,&-]+?)(?=\s+(?:Plot|Flat|Street|Road|having|residing|located|CIN|Address|Particulars|\d{{1,5}}\b|\n\n|\Z))",
+            pre, re.I
+        )
+        seen_names = set()
+        for tm in table_matches:
+            r_str = tm.group(1).strip().title()
+            n_str = clean_party_name(tm.group(2).strip())
+            words = set(n_str.lower().split())
+            if 3 <= len(n_str) <= 80 and len(n_str.split()) <= 7 and not (words & non_party_verbs):
+                if n_str.lower() not in seen_names:
+                    seen_names.add(n_str.lower())
+                    parties.append(Party(name=n_str, role=r_str, evidence=_pre_evidence(ctx, n_str)))
+
+    if not parties:
         m = re.search(r"between\s+(.{3,100}?)\s+and\s+(.{3,100}?)(?:[,.(]|\s+having|\s+whereas)", pre, re.I)
         if m:
-            parties = [Party(name=g.strip(), evidence=_pre_evidence(ctx, g.strip())) for g in m.groups()]
+            parties = [Party(name=clean_party_name(g.strip()), evidence=_pre_evidence(ctx, g.strip())) for g in m.groups()
+                       if len(clean_party_name(g.strip())) >= 3]
     return parties
 
 
@@ -404,11 +434,20 @@ def extract_payment_terms(ctx: Context) -> list[PaymentTerm]:
         if not amounts and not re.search(r"payable|paid|deduct|reimburs", u.text, re.I):
             continue
         low = u.text.lower()
-        kind = ("bonus" if "bonus" in low else "deduction" if "deduct" in low else
-                "late_payment_interest" if "interest" in low else
-                "reimbursement" if "reimburs" in low else
-                "salary" if re.search(r"salary|remuneration|compensation|wages", low) else
-                "fees" if re.search(r"\bfees?\b|invoice", low) else "payment")
+        if re.search(r"salary|remuneration|compensation|wages", low):
+            kind = "salary"
+        elif re.search(r"\bbonus\b|incentive|commission", low):
+            kind = "bonus"
+        elif re.search(r"\bfees?\b|invoice|retainer", low):
+            kind = "fees"
+        elif re.search(r"reimburs", low):
+            kind = "reimbursement"
+        elif re.search(r"late\s*payment|interest", low):
+            kind = "late_payment_interest"
+        elif re.search(r"deduct|recovery|set\s*off", low):
+            kind = "deduction"
+        else:
+            kind = "payment"
         f = _FREQ.search(u.text)
         out.append(PaymentTerm(kind=kind, description=u.text[:400], amounts=amounts,
                                frequency=f.group(0) if f else None, evidence=ctx.evidence(u)))
@@ -417,19 +456,50 @@ def extract_payment_terms(ctx: Context) -> list[PaymentTerm]:
 
 _OBL_RE = re.compile(r"\b(shall not|must not|may not|cannot|shall|must|agrees? to|undertakes? to|"
                      r"is required to|are required to)\b", re.I)
-_SUBJECT_RE = re.compile(r"^(?:The\s+)?([A-Z][A-Za-z]+(?:\s[A-Z][A-Za-z]+){0,3}|Either party|Each party|Both parties)\s+"
-                         r"(?:shall|must|agrees?|undertakes?|may not|cannot|will|is required|are required)")
+
+_NON_PARTY_TERMS = {
+    "agreement", "this agreement", "employment", "leave", "first three months",
+    "it", "provision", "provisions", "template", "document", "contract", "dispute",
+    "disputes", "laws", "law", "courts", "court", "section", "clause", "notice",
+    "information", "work product", "materials", "amendment", "remaining provisions"
+}
+
+_MODAL_SUBJECT_RE = re.compile(
+    r"(?:(?:^|[,;.]|\bafter\b|\bduring\b|\bon\b)\s*(?:the\s+)?)?"
+    r"([A-Z][A-Za-z]+(?:\s+[A-Z]?[a-z]+){0,2}|either party|each party|both parties|neither party)"
+    r"\s+(?:shall\s+not|must\s+not|may\s+not|cannot|shall|must|agrees?\s+to|undertakes?\s+to|is\s+required\s+to|are\s+required\s+to)\b",
+    re.I
+)
 
 
 def extract_obligations(ctx: Context, limit: int = 60) -> list[Obligation]:
     out = []
     for u in ctx.units:
+        # Skip boilerplates, demo disclaimers, recitals, and pure contract mechanics
+        if re.search(r"\b(?:demo note|fictional agreement|template|recitals?|whereas)\b", u.text, re.I):
+            continue
+        if u.clause_id == "preamble":
+            continue
+        # Skip contract mechanics clauses that describe the document rather than party conduct
+        if re.search(r"^(?:this agreement shall be governed|employment shall commence|"
+                     r"the first \w+ months shall be|any amendment must be|"
+                     r"if a provision is held unenforceable)", u.text.strip(), re.I):
+            continue
+
         m = _OBL_RE.search(u.text)
         if not m:
             continue
-        subj = _SUBJECT_RE.match(u.text)
+
+        subj_match = _MODAL_SUBJECT_RE.search(u.text)
+        party = None
+        if subj_match:
+            cand = subj_match.group(1).strip()
+            cand_clean = re.sub(r"^(?:the\s+)", "", cand, flags=re.I).strip()
+            if cand_clean.lower() not in _NON_PARTY_TERMS and not any(np in cand_clean.lower() for np in ("agreement", "template", "document")):
+                party = cand_clean
+
         prohibition = m.group(1).lower() in {"shall not", "must not", "may not", "cannot"}
-        out.append(Obligation(party=subj.group(1) if subj else None,
+        out.append(Obligation(party=party,
                               kind="prohibition" if prohibition else "obligation",
                               text=u.text[:500], category=u.category, evidence=ctx.evidence(u)))
         if len(out) >= limit:

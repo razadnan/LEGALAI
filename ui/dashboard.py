@@ -81,11 +81,16 @@ def render() -> None:
             parties_html = ""
             if analysis.parties:
                 for p in analysis.parties:
-                    if hasattr(p, "name"):
-                        role = getattr(p, "role", "")
-                        parties_html += f"<dt>{role or 'Party'}</dt><dd>{p.name}</dd>"
+                    # analysis.parties is list[str] after schema coercion.
+                    # Items may be "Name (Role)" or just "Name".
+                    p_str = str(p)
+                    # Try to split "Name (Role)" format produced by the schema validator
+                    m = __import__("re").match(r"^(.+?)\s+\((.+?)\)\s*$", p_str)
+                    if m:
+                        name_part, role_part = m.group(1).strip(), m.group(2).strip()
+                        parties_html += f"<dt>{role_part}</dt><dd>{name_part}</dd>"
                     else:
-                        parties_html += f"<dt>Party</dt><dd>{p}</dd>"
+                        parties_html += f"<dt>Party</dt><dd>{p_str}</dd>"
             else:
                 parties_html = "<dt>Parties</dt><dd>Not identified</dd>"
 

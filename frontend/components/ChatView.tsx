@@ -1,27 +1,68 @@
 "use client";
 
 import { useState } from "react";
-import type { AnswerResult, Source } from "@/lib/api";
+import type { AnswerResult, ChatTurn, Source } from "@/lib/api";
 
 interface Message {
   role: "user" | "assistant";
   text: string;
+  question?: string;
   answer?: AnswerResult;
 }
 
 interface ChatViewProps {
-  onAsk: (question: string) => Promise<AnswerResult>;
+  onAsk: (
+    question: string,
+    history: ChatTurn[],
+    simpleLanguage: boolean,
+  ) => Promise<AnswerResult>;
   initialQuestion?: string;
 }
 
-function EvidenceText({ text }: { text: string }) {
+const AGENT_LABELS: Record<string, string> = {
+  document_agent: "Document",
+  risk_agent: "Risk",
+  rag_agent: "RAG",
+  comparison_agent: "Compare",
+  report_generator: "Report",
+};
+
+const HIGHLIGHT_STOP_WORDS = new Set([
+  "about", "after", "again", "also", "and", "are", "can", "does", "for", "from",
+  "have", "how", "into", "its", "may", "not", "our", "that", "the", "their",
+  "them", "there", "this", "what", "when", "where", "which", "who", "with",
+  "would", "you",
+]);
+
+function EvidenceText({ text, question }: { text: string; question: string }) {
   const trimmed = text.trim();
-  const end = trimmed.search(/[.!?](?:\s|$)/);
-  const splitAt = end >= 0 ? end + 1 : Math.min(trimmed.length, 180);
+  const sentences = trimmed.split(/(?<=[.!?])\s+|\n+/).filter(Boolean);
+  const queryTerms = new Set(
+    (question.toLowerCase().match(/[a-z0-9]+/g) ?? [])
+      .filter((term) => term.length > 2 && !HIGHLIGHT_STOP_WORDS.has(term)),
+  );
+  if (!sentences.length || !queryTerms.size) return <>{trimmed}</>;
+
+  let bestIndex = -1;
+  let bestScore = 0;
+  sentences.forEach((sentence, index) => {
+    const terms = new Set(sentence.toLowerCase().match(/[a-z0-9]+/g) ?? []);
+    const score = [...queryTerms].filter((term) => terms.has(term)).length;
+    if (score > bestScore) {
+      bestIndex = index;
+      bestScore = score;
+    }
+  });
+  if (bestIndex < 0) return <>{trimmed}</>;
+
   return (
     <>
-      <mark>{trimmed.slice(0, splitAt)}</mark>
-      {trimmed.slice(splitAt)}
+      {sentences.map((sentence, index) => (
+        <span key={index}>
+          {index === bestIndex ? <mark>{sentence}</mark> : sentence}
+          {index < sentences.length - 1 ? " " : ""}
+        </span>
+      ))}
     </>
   );
 }
@@ -37,17 +78,24 @@ export function ChatView({ onAsk, initialQuestion = "" }: ChatViewProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [openSources, setOpenSources] = useState<Record<string, boolean>>({});
+  const [simpleLanguage, setSimpleLanguage] = useState(false);
 
   async function send(value = question) {
     const text = value.trim();
     if (!text || busy) return;
+    const history = messages
+      .slice(-6)
+      .map(({ role, text: content }) => ({ role, content: content.slice(-2000) }));
     setQuestion("");
     setError("");
     setMessages((current) => [...current, { role: "user", text }]);
     setBusy(true);
     try {
-      const answer = await onAsk(text);
-      setMessages((current) => [...current, { role: "assistant", text: answer.answer, answer }]);
+      const answer = await onAsk(text, history, simpleLanguage);
+      setMessages((current) => [
+        ...current,
+        { role: "assistant", text: answer.answer, question: text, answer },
+      ]);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The question could not be answered.");
     } finally {
@@ -56,12 +104,19 @@ export function ChatView({ onAsk, initialQuestion = "" }: ChatViewProps) {
   }
 
   const suggestions = [
-    "What is my notice period?",
-    "How much is the salary?",
-    "Can I work for a competitor?",
-    "What is confidential?",
-    "Does it cover vacation leave?",
+    "Who are the parties?",
+    "What is the notice period?",
+    "What are the payment terms?",
+    "How can the agreement be terminated?",
   ];
+
+  function agentTrace(agents: string[]) {
+    const steps = ["Router", ...agents.map((agent) => AGENT_LABELS[agent] ?? agent)];
+    if (agents.includes("rag_agent") || agents.includes("risk_agent")) {
+      steps.push("Verifier");
+    }
+    return steps.join(" → ");
+  }
 
   return (
     <>
@@ -80,6 +135,11 @@ export function ChatView({ onAsk, initialQuestion = "" }: ChatViewProps) {
               {message.text}
               {message.answer && (
                 <>
+                  {message.answer.agents_invoked.length > 0 && (
+                    <div className="agent-trace" aria-label="Agent trace">
+                      {agentTrace(message.answer.agents_invoked)}
+                    </div>
+                  )}
                   {(!message.answer.grounded || message.answer.warnings.length > 0) && (
                     <div className="warn">
                       {!message.answer.grounded
@@ -114,7 +174,10 @@ export function ChatView({ onAsk, initialQuestion = "" }: ChatViewProps) {
                               {source.page ? ` · page ${source.page}` : ""}
                             </b>
                             <br />
-                            <EvidenceText text={source.text} />
+                            <EvidenceText
+                              question={message.question ?? ""}
+                              text={source.text}
+                            />
                           </div>
                         ) : null;
                       })}
@@ -126,19 +189,30 @@ export function ChatView({ onAsk, initialQuestion = "" }: ChatViewProps) {
           ))}
           {busy && <div className="msg a small">Searching clauses…</div>}
         </div>
-        <div className="suggestions">
-          {suggestions.map((suggestion) => (
-            <button
-              className="chip"
-              disabled={busy}
-              key={suggestion}
-              onClick={() => void send(suggestion)}
-              type="button"
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
+        {messages.length === 0 && (
+          <div className="suggestions" aria-label="Suggested questions">
+            <div className="small">Try asking:</div>
+            {suggestions.map((suggestion) => (
+              <button
+                className="chip"
+                disabled={busy}
+                key={suggestion}
+                onClick={() => void send(suggestion)}
+                type="button"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
+        <label className="simple-language">
+          <input
+            checked={simpleLanguage}
+            onChange={(event) => setSimpleLanguage(event.target.checked)}
+            type="checkbox"
+          />
+          Explain simply
+        </label>
         <form
           className="inp"
           onSubmit={(event) => {

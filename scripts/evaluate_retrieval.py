@@ -26,20 +26,28 @@ from rag_engine.retrieval import RetrievedPassage, retrieve  # noqa: E402
 from rag_engine.vector_store import VectorStore  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures"
-DOCUMENT_ID = "RAG-BENCHMARK"
 
 
-def load_benchmark() -> tuple[DocumentData, list[dict]]:
-    text = (FIXTURES / "rag_benchmark_contract.txt").read_text(encoding="utf-8")
+def _load_document(filename: str, document_id: str) -> DocumentData:
+    text = (FIXTURES / filename).read_text(encoding="utf-8")
     pages = [Page(page_number=i, text=page.strip()) for i, page in enumerate(text.split("\f"), 1)]
-    document = DocumentData(
-        document_id=DOCUMENT_ID,
-        filename="synthetic_employment_agreement.txt",
-        pages=pages,
-        file_type="txt",
-    )
+    return DocumentData(document_id=document_id, filename=filename, pages=pages, file_type="txt")
+
+
+def load_benchmark() -> tuple[list[DocumentData], list[dict]]:
+    documents = [
+        _load_document("rag_benchmark_contract.txt", "RAG-BENCHMARK-EMPLOYMENT"),
+        _load_document("rag_benchmark_nda.txt", "RAG-BENCHMARK-NDA"),
+        _load_document("rag_benchmark_lease.txt", "RAG-BENCHMARK-LEASE"),
+        _load_document("rag_benchmark_services.txt", "RAG-BENCHMARK-SERVICES"),
+    ]
     questions = json.loads((FIXTURES / "rag_retrieval_benchmark.json").read_text(encoding="utf-8"))
-    return document, questions
+    questions.extend(
+        json.loads((FIXTURES / "rag_retrieval_benchmark_additional.json").read_text(encoding="utf-8"))
+    )
+    for item in questions:
+        item.setdefault("document_id", documents[0].document_id)
+    return documents, questions
 
 
 def is_relevant(passage: RetrievedPassage, gold_clauses: Iterable[str]) -> bool:
@@ -138,11 +146,16 @@ def rerank_passages(
     return [passage for _, (passage, _) in ranked]
 
 
-def evaluate_benchmark(document, questions, embedder, top_k: int, reranker=None):
-    chunks = chunk_document(document)
-    clause_ids = {clause for chunk in chunks for clause in chunk.clause_ids}
-    headings = {chunk.heading for chunk in chunks}
+def evaluate_benchmark(documents, questions, embedder, top_k: int, reranker=None):
+    chunks_by_document = {document.document_id: chunk_document(document) for document in documents}
+    chunks = [chunk for document_chunks in chunks_by_document.values() for chunk in document_chunks]
+    documents_by_id = {document.document_id: document for document in documents}
     for item in questions:
+        document_chunks = chunks_by_document.get(item["document_id"])
+        if document_chunks is None:
+            raise ValueError(f"{item['id']} refers to unknown document {item['document_id']!r}.")
+        clause_ids = {clause for chunk in document_chunks for clause in chunk.clause_ids}
+        headings = {chunk.heading for chunk in document_chunks}
         missing = [
             clause for clause in item["gold_clauses"]
             if clause != "PREAMBLE" and clause not in clause_ids
@@ -163,7 +176,10 @@ def evaluate_benchmark(document, questions, embedder, top_k: int, reranker=None)
             ) from None
         embedding_seconds = perf_counter() - start
 
-        if len(store.get_chunks(DOCUMENT_ID)) != len(chunks):
+        if any(
+            len(store.get_chunks(document.document_id)) != len(chunks_by_document[document.document_id])
+            for document in documents
+        ):
             raise RuntimeError(
                 "The embedding provider returned an incomplete document embedding result."
             )
@@ -171,7 +187,7 @@ def evaluate_benchmark(document, questions, embedder, top_k: int, reranker=None)
         start = perf_counter()
         try:
             results = [
-                retrieve(DOCUMENT_ID, item["question"], top_k=top_k, store=store)
+                retrieve(item["document_id"], item["question"], top_k=top_k, store=store)
                 for item in questions
             ]
         except Exception as exc:
@@ -181,8 +197,20 @@ def evaluate_benchmark(document, questions, embedder, top_k: int, reranker=None)
         retrieval_seconds = perf_counter() - start
 
         baseline = score_ranked_results(results, questions)
+        per_document = {}
+        for document in documents:
+            indexes = [i for i, item in enumerate(questions) if item["document_id"] == document.document_id]
+            if indexes:
+                per_document[document.filename] = score_ranked_results(
+                    [results[i] for i in indexes], [questions[i] for i in indexes]
+                )
+        macro_average = {
+            key: mean(metrics[key] for metrics in per_document.values())
+            for key in baseline
+        }
         reranked_results = None
         reranked_metrics = None
+        reranked_per_document = None
         reranking_seconds = 0.0
         if reranker is not None:
             start = perf_counter()
@@ -203,13 +231,24 @@ def evaluate_benchmark(document, questions, embedder, top_k: int, reranker=None)
                 ) from None
             reranking_seconds = perf_counter() - start
             reranked_metrics = score_ranked_results(reranked_results, questions)
+            reranked_per_document = {
+                name: score_ranked_results(
+                    [reranked_results[i] for i, item in enumerate(questions)
+                     if documents_by_id[item["document_id"]].filename == name],
+                    [item for item in questions if documents_by_id[item["document_id"]].filename == name],
+                )
+                for name in per_document
+            }
 
     return {
         "chunks": chunks,
         "results": results,
         "reranked_results": reranked_results,
         "baseline": baseline,
+        "per_document": per_document,
+        "macro_average": macro_average,
         "reranked": reranked_metrics,
+        "reranked_per_document": reranked_per_document,
         "timings": {
             "document_embedding_seconds": embedding_seconds,
             "query_and_retrieval_seconds": retrieval_seconds,
@@ -224,7 +263,7 @@ def load_cross_encoder(model_name: str):
     except ImportError:
         raise RuntimeError(
             "Install optional evaluation dependencies with "
-            "'.\\.venv\\Scripts\\python.exe -m pip install -r requirements-eval.txt'."
+            "'.\\.venv\\Scripts\\python.exe -m pip install sentence-transformers==5.7.0'."
         ) from None
     try:
         return CrossEncoder(model_name, max_length=512, local_files_only=True)
@@ -261,8 +300,8 @@ def main() -> None:
 
     try:
         embedder, provider, model = resolve_embedder(args.embedding_mode)
-        document, questions = load_benchmark()
-        evaluation = evaluate_benchmark(document, questions, embedder, args.top_k, reranker)
+        documents, questions = load_benchmark()
+        evaluation = evaluate_benchmark(documents, questions, embedder, args.top_k, reranker)
     except Exception as exc:
         if args.embedding_mode == "production":
             raise SystemExit(
@@ -277,14 +316,25 @@ def main() -> None:
     reranked = evaluation["reranked"]
     timings = evaluation["timings"]
 
-    print(f"Dataset: {len(questions)} questions; {len(chunks)} chunks")
+    print(f"Dataset: {len(documents)} synthetic contracts; {len(questions)} questions; {len(chunks)} chunks")
     print(f"Embeddings: mode={args.embedding_mode}; provider={provider}; model={model}")
     print("Vector index: temporary isolated backend; production collections and storage are not used")
     print("RRF: " + " | ".join(f"{key}={value:.3f}" for key, value in baseline.items()))
+    print(f"Macro average across {len(evaluation['per_document'])} contracts: " + " | ".join(
+        f"{key}={value:.3f}" for key, value in evaluation["macro_average"].items()
+    ))
+    for filename, metrics in evaluation["per_document"].items():
+        print(f"  {filename}: " + " | ".join(f"{key}={value:.3f}" for key, value in metrics.items()))
     if reranked is not None:
         print(f"Cross-encoder ({args.cross_encoder}): " + " | ".join(
             f"{key}={value:.3f} ({value - baseline[key]:+.3f})"
             for key, value in reranked.items()
+        ))
+        print("Reranked macro average: " + " | ".join(
+            f"{key}={value:.3f}" for key, value in {
+                key: mean(metrics[key] for metrics in evaluation["reranked_per_document"].values())
+                for key in reranked
+            }.items()
         ))
 
     print("\nPer-query first relevant rank:")
