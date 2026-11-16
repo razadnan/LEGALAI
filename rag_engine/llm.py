@@ -1,14 +1,16 @@
-"""LLM provider wrapper supporting Google Gemini and OpenAI with offline fallback."""
+"""LLM provider wrapper supporting Google Gemini and OpenAI with graceful fallback."""
 from __future__ import annotations
 
-import json
 import logging
+import time
 from typing import Callable, Optional
 
 from config.settings import get_settings
 from core.exceptions import LLMError
 
 logger = logging.getLogger(__name__)
+
+FALLBACK_MESSAGE = "Fallback mode: Gemini is temporarily unavailable. Deterministic extraction and cached results remain available."
 
 
 def _create_gemini_llm(api_key: str, model_name: str) -> Callable[[str, str], str]:
@@ -18,19 +20,32 @@ def _create_gemini_llm(api_key: str, model_name: str) -> Callable[[str, str], st
     client = genai.Client(api_key=api_key)
 
     def _call(system_prompt: str, user_prompt: str) -> str:
+        config = types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            temperature=0.1,
+        )
+        # Task 4: One retry with 2s delay, then fallback
         try:
-            config = types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                temperature=0.1,
-            )
             response = client.models.generate_content(
                 model=model_name,
                 contents=user_prompt,
                 config=config,
             )
             return response.text or ""
-        except Exception as exc:
-            raise LLMError(f"Gemini API call failed: {exc}") from exc
+        except Exception as exc1:
+            logger.warning(f"Gemini API initial call failed: {exc1}. Retrying in 2 seconds...")
+            time.sleep(2)
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=user_prompt,
+                    config=config,
+                )
+                return response.text or ""
+            except Exception as exc2:
+                logger.error(f"Gemini API retry failed: {exc2}")
+                # User safety fix 3: Do not expose raw str(error) in UI, log it and raise clean fallback
+                raise LLMError(FALLBACK_MESSAGE) from exc2
 
     return _call
 
@@ -52,7 +67,8 @@ def _create_openai_llm(api_key: str, model_name: str) -> Callable[[str, str], st
             )
             return response.choices[0].message.content or ""
         except Exception as exc:
-            raise LLMError(f"OpenAI API call failed: {exc}") from exc
+            logger.error(f"OpenAI call failed: {exc}")
+            raise LLMError(FALLBACK_MESSAGE) from exc
 
     return _call
 

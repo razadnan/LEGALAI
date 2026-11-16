@@ -150,10 +150,25 @@ def _windows(units: List[Tuple[str, int]], max_words: int, overlap_words: int):
 
 def chunk_document(doc: DocumentData, max_words: int = 220, min_words: int = 20,
                    overlap_words: int = 30) -> List[Chunk]:
-    """Split a document into clause-aware chunks with page references."""
+    """Split a document into clause-aware chunks with page references.
+
+    Fix 2 improvements:
+    - Preserve section numbers in chunk heading for retrieval boosting
+    - Inject cross-reference annotations ([XREF: clause_ids]) into headings
+      so BM25 and semantic search can resolve "see Section X" queries
+    - Use larger max_words (220) so a full clause is kept intact
+    """
     if not doc.pages or not any((p.text or "").strip() for p in doc.pages):
         raise InvalidDocumentError(f"Document {doc.document_id!r} has no extractable text.")
     segs = _merge_small(_segments(doc, max_words), min_words, max_words)
+
+    # Cross-reference regex — Fix 2
+    _XREF_RE = re.compile(
+        r"\b(?:clause|section|article|schedule|exhibit|annex|appendix)\s+"
+        r"(\d{1,3}(?:\.\d{1,3}){0,4})\b",
+        re.I,
+    )
+
     chunks: List[Chunk] = []
     for seg in segs:
         for win in _windows(seg.units, max_words, overlap_words):
@@ -162,6 +177,18 @@ def chunk_document(doc: DocumentData, max_words: int = 220, min_words: int = 20,
                 continue
             pages = [p for _, p in win]
             idx = len(chunks)
+
+            # Fix 2: Enrich heading with cross-references found in this chunk's text
+            heading = seg.heading
+            xrefs = set(_XREF_RE.findall(text)) - set(seg.clause_ids)
+            if xrefs:
+                heading = heading + " [XREF:" + ",".join(sorted(xrefs)) + "]"
+
+            # Fix 2: Prefix heading with primary clause number for direct lookup
+            primary_clause = seg.clause_ids[0] if seg.clause_ids else None
+            if primary_clause and primary_clause not in heading:
+                heading = f"§{primary_clause} {heading}"
+
             chunks.append(Chunk(
                 chunk_id=f"{doc.document_id}-c{idx:03d}",
                 document_id=doc.document_id,
@@ -169,8 +196,8 @@ def chunk_document(doc: DocumentData, max_words: int = 220, min_words: int = 20,
                 text=text,
                 page_start=min(pages),
                 page_end=max(pages),
-                clause=seg.clause_ids[0] if seg.clause_ids else None,
+                clause=primary_clause,
                 clause_ids=list(seg.clause_ids),
-                heading=seg.heading,
+                heading=heading,
             ))
     return chunks

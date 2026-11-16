@@ -1,0 +1,125 @@
+{
+  "timestamp": "2026-11-16 01:07:42",
+  "tests": {
+    "domain_guard": {
+      "status": "PASS",
+      "legal_doc_accepted": true,
+      "recipe_doc_rejected": true,
+      "recipe_query_blocked": true,
+      "legal_query_allowed": true
+    },
+    "ingestion": {
+      "status": "PASS",
+      "doc_id": "TEST_MSA_001",
+      "pages": 2,
+      "text_length": 3226
+    },
+    "structured_extraction": {
+      "status": "PASS",
+      "field_coverage": "8/10",
+      "confidence": 0.9,
+      "governing_law": "New York",
+      "notice_period": "",
+      "warnings": [
+        "LLM extraction unavailable (LLMError); fell back to deterministic rule extraction."
+      ]
+    },
+    "rag_qa": {
+      "status": "PASS",
+      "accuracy": "4/4",
+      "queries": [
+        {
+          "question": "What is the annual base subscription fee?",
+          "answer_preview": "2.1 Client shall pay Provider an annual base subscription fee of $240,000, payable quarterly in advance in installments ...",
+          "grounded": true,
+          "expected_found": true,
+          "sources_count": 1
+        },
+        {
+          "question": "What is the notice period for convenience termination?",
+          "answer_preview": "TERM AND TERMINATION 3.1 Either party may terminate this Agreement for convenience upon ninety (90) days prior written n...",
+          "grounded": true,
+          "expected_found": true,
+          "sources_count": 1
+        },
+        {
+          "question": "What law governs this agreement and which courts have jurisdiction?",
+          "answer_preview": "GOVERNING LAW AND JURISDICTION 9.1 This Agreement shall be governed by and construed in accordance with the laws of the ...",
+          "grounded": true,
+          "expected_found": true,
+          "sources_count": 1
+        },
+        {
+          "question": "What is the liability cap under this contract?",
+          "answer_preview": "7.2 PROVIDER'S TOTAL AGGREGATE LIABILITY ARISING UNDER THIS AGREEMENT SHALL BE STRICTLY CAPPED AT THE FEES ACTUALLY PAID...",
+          "grounded": true,
+          "expected_found": true,
+          "sources_count": 1
+        }
+      ]
+    },
+    "risk_analysis": {
+      "status": "PASS",
+      "findings_count": 3,
+      "high_severity_count": 1,
+      "sample_scored_risk": {
+        "clause": "3.2",
+        "severity": "high",
+        "affected_party": "Both",
+        "business_impact": "High severity: One party may end the agreement immediately or at its sole discretion, which removes job/contract security and can make . This requires legal review before signing.",
+        "has_redline": false,
+        "confidence": 0.5
+      }
+    },
+    "missing_clause_playbook": {
+      "status": "PASS",
+      "playbook": "MSA",
+      "present_count": 5,
+      "absent_count": 6,
+      "partial_count": 4,
+      "sample_absent_provisions": [
+        "Insurance",
+        "Change Management",
+        "Acceptance Criteria",
+        "SLA / Performance Standards",
+        "Data Protection"
+      ],
+      "sample_present_provisions": [
+        "Payment Terms",
+        "Limitation of Liability",
+        "Indemnification",
+        "Intellectual Property",
+        "Governing Law"
+      ]
+    },
+    "legal_reasoning": {
+      "status": "PASS",
+      "favorability": "unclear",
+      "rationale_preview": "Preliminary analysis based on risk distribution (3 flagged risk(s)). LLM reasoning layer unavailable (LLMError)....",
+      "recommendations_count": 3,
+      "gaps_count": 6,
+      "layperson_summary_preview": "This Master Services Agreement contains 3 flagged risk(s) and 6 missing standard provision(s). Carefully review the termination and liability clauses with legal..."
+    },
+    "comparison": {
+      "status": "PASS",
+      "changes_detected": 3,
+      "summary": "3 modified \u00b7 0 added \u00b7 0 removed \u00b7 12 unchanged"
+    },
+    "pdf_report": {
+      "status": "PASS",
+      "report_path": "C:\\Users\\adnan\\Desktop\\legal\\LegalMind-AI\\storage\\reports\\legalmind_report_20261116_010834.pdf",
+      "file_size_bytes": 6090
+    }
+  },
+  "metrics": {
+    "extraction_confidence": 0.9,
+    "retrieval_recall_at_k": 1.0,
+    "citation_support_rate": 0.7,
+    "unsupported_citation_rate": 0.0,
+    "false_refusal_rate": 0.0,
+    "total_claims": 10,
+    "clauses_cited": 7,
+    "unsupported_claims": 0
+  },
+  "verdict": "PASS"
+}

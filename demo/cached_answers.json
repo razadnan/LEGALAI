@@ -1,0 +1,130 @@
+{
+  "document_id": "DOC_DEMO_01",
+  "generated_at": "2026-11-16T12:50:00Z",
+  "model": "gemini-3.5-flash",
+  "questions": {
+    "annual_fee": {
+      "question": "What is the annual base subscription fee?",
+      "answer": "The annual base subscription fee is $240,000, payable quarterly in advance in installments of $60,000.",
+      "status": "supported",
+      "confidence": "High",
+      "sources": [
+        {
+          "page": 1,
+          "clause": "2.1",
+          "quote": "Client shall pay Provider an annual base subscription fee of $240,000, payable quarterly in advance in installments of $60,000."
+        }
+      ]
+    },
+    "notice_period": {
+      "question": "What is the notice period for convenience termination?",
+      "answer": "Either party may terminate the agreement for convenience upon ninety (90) days prior written notice.",
+      "status": "supported",
+      "confidence": "High",
+      "sources": [
+        {
+          "page": 1,
+          "clause": "3.1",
+          "quote": "Either party may terminate this Agreement for convenience upon ninety (90) days prior written notice."
+        }
+      ]
+    },
+    "liability_cap": {
+      "question": "What is the liability cap under this contract?",
+      "answer": "Provider's total aggregate liability is strictly capped at the fees actually paid by Client in the three (3) months preceding the claim.",
+      "status": "supported",
+      "confidence": "High",
+      "sources": [
+        {
+          "page": 2,
+          "clause": "7.2",
+          "quote": "PROVIDER'S TOTAL AGGREGATE LIABILITY ARISING UNDER THIS AGREEMENT SHALL BE STRICTLY CAPPED AT THE FEES ACTUALLY PAID BY CLIENT IN THE THREE (3) MONTHS PRECEDING THE CLAIM."
+        }
+      ]
+    },
+    "governing_law": {
+      "question": "Which law governs this agreement?",
+      "answer": "This Agreement is governed by and construed in accordance with the laws of the State of New York, with exclusive jurisdiction in New York County.",
+      "status": "supported",
+      "confidence": "High",
+      "sources": [
+        {
+          "page": 2,
+          "clause": "9.1",
+          "quote": "This Agreement shall be governed by and construed in accordance with the laws of the State of New York, without regard to conflict of laws principles."
+        }
+      ]
+    },
+    "sla": {
+      "question": "Is there an SLA in this contract?",
+      "answer": "The uploaded document does not contain information sufficient to answer this question.",
+      "status": "not_found",
+      "confidence": "Not found",
+      "sources": []
+    }
+  },
+  "comparison": {
+    "summary": "3 modified \u00b7 0 added \u00b7 0 removed \u00b7 12 unchanged",
+    "changes": [
+      {
+        "change_type": "modified",
+        "severity": "high",
+        "section": "Clause 2.1 - Annual Fee",
+        "old_text": "annual base subscription fee of $240,000, payable quarterly in advance in installments of $60,000.",
+        "new_text": "annual base subscription fee of $300,000, payable quarterly in advance in installments of $75,000.",
+        "old_page": 1,
+        "new_page": 1
+      },
+      {
+        "change_type": "modified",
+        "severity": "high",
+        "section": "Clause 3.1 - Notice Period",
+        "old_text": "convenience upon ninety (90) days prior written notice.",
+        "new_text": "convenience upon one hundred twenty (120) days prior written notice.",
+        "old_page": 1,
+        "new_page": 1
+      },
+      {
+        "change_type": "modified",
+        "severity": "high",
+        "section": "Clause 7.2 - Liability Cap",
+        "old_text": "STRICTLY CAPPED AT THE FEES ACTUALLY PAID BY CLIENT IN THE THREE (3) MONTHS PRECEDING THE CLAIM.",
+        "new_text": "CAPPED AT TWELVE (12) MONTHS OF FEES PAID BY CLIENT.",
+        "old_page": 2,
+        "new_page": 2
+      }
+    ]
+  },
+  "risks": [
+    {
+      "clause": "3.2",
+      "severity": "high",
+      "affected_party": "Client",
+      "title": "Immediate Termination for Overdue Fees",
+      "quote": "Provider may terminate this Agreement immediately without notice if Client fails to pay undisputed fees within ten (10) days of overdue notice.",
+      "page": 1,
+      "business_impact": "Provider can cancel services abruptly with only a 10-day notice window, risking immediate operational shutdown.",
+      "lawyer_question": "Can we negotiate a 30-day cure period and eliminate immediate unilateral termination?"
+    },
+    {
+      "clause": "7.2",
+      "severity": "high",
+      "affected_party": "Client",
+      "title": "Severe 3-Month Liability Cap",
+      "quote": "PROVIDER'S TOTAL AGGREGATE LIABILITY ARISING UNDER THIS AGREEMENT SHALL BE STRICTLY CAPPED AT THE FEES ACTUALLY PAID BY CLIENT IN THE THREE (3) MONTHS PRECEDING THE CLAIM.",
+      "page": 2,
+      "business_impact": "Recovery for catastrophic service outage is capped at only 3 months of fees ($60,000) against an annual commitment of $240,000.",
+      "lawyer_question": "Should the liability cap be increased to at least 12 months of fees or total contract value?"
+    },
+    {
+      "clause": "8.1",
+      "severity": "medium",
+      "affected_party": "Client",
+      "title": "24-Month Non-Solicitation",
+      "quote": "Client agrees not to solicit or hire any of Provider's employees or contractors for a period of twenty-four (24) months following termination of this Agreement.",
+      "page": 2,
+      "business_impact": "Restricts client recruitment and hiring for 2 full years after contract termination.",
+      "lawyer_question": "Can this non-solicitation period be reduced to 6 or 12 months?"
+    }
+  ]
+}

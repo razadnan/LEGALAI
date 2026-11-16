@@ -410,6 +410,103 @@ class DocumentInfo(_Base):
     page_count: int = 0
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Fix 1 — Structured extraction schema
+# ─────────────────────────────────────────────────────────────────────────────
+class StructuredFields(_Base):
+    """10-category structured extraction result (Fix 1)."""
+    parties: list[dict] = Field(default_factory=list)
+    effective_date: str = ""
+    expiry_date: str = ""
+    notice_period: str = ""
+    governing_law: str = ""
+    monetary_terms: list[dict] = Field(default_factory=list)
+    termination: list[dict] = Field(default_factory=list)
+    confidentiality: list[dict] = Field(default_factory=list)
+    intellectual_property: list[dict] = Field(default_factory=list)
+    indemnity: list[dict] = Field(default_factory=list)
+    liability: list[dict] = Field(default_factory=list)
+    data_protection: list[dict] = Field(default_factory=list)
+    extraction_confidence: float = 1.0
+    warnings: list[str] = Field(default_factory=list)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fix 5 — Missing-clause playbook schemas
+# ─────────────────────────────────────────────────────────────────────────────
+class PlaybookFinding(_Base):
+    """One entry in the missing-clause checklist (Fix 5)."""
+    provision: str
+    status: Literal["present", "absent", "partial", "conflicting"]
+    clause: str = ""
+    page: Optional[int] = None
+    exact_quote: str = ""
+    note: str = ""
+
+
+class PlaybookResult(_Base):
+    """Full missing-clause checklist result (Fix 5)."""
+    playbook: str
+    findings: list[PlaybookFinding] = Field(default_factory=list)
+    present_count: int = 0
+    absent_count: int = 0
+    partial_count: int = 0
+    conflicting_count: int = 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fix 3 — Legal reasoning layer schema
+# ─────────────────────────────────────────────────────────────────────────────
+class LegalReasoningResult(_Base):
+    """Output of the post-retrieval legal reasoning layer (Fix 3)."""
+    favorability: Literal["client-favorable", "provider-favorable", "balanced", "unclear"] = "unclear"
+    favorability_rationale: str = ""
+    gaps: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+    summary_for_layperson: str = ""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fix 6 — Scored risk with rationale schema
+# ─────────────────────────────────────────────────────────────────────────────
+class RiskScore(_Base):
+    """Scored risk with full rationale, evidence, and proposed redline (Fix 6)."""
+    risk_id: str = ""
+    severity: Severity = "medium"
+    affected_party: str = ""
+    clause: str = ""
+    clause_number: str = ""
+    page: Optional[int] = None
+    title: str = ""
+    category: str = ""
+    business_impact: str = ""
+    explanation: str = ""
+    exact_quote: str = ""
+    confidence: float = 1.0
+    proposed_redline: str = ""
+    lawyer_question: str = ""
+    verified: Optional[bool] = None
+    finding_type: str = "risk"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fix 7 — Pipeline metrics schema
+# ─────────────────────────────────────────────────────────────────────────────
+class PipelineMetrics(_Base):
+    """Pipeline measurement snapshot (Fix 7)."""
+    extraction_confidence: float = 0.0
+    retrieval_recall_at_k: float = 0.0
+    citation_support_rate: float = 0.0
+    unsupported_citation_rate: float = 0.0
+    false_refusal_rate: float = 0.0
+    clauses_cited: int = 0
+    total_claims: int = 0
+    unsupported_claims: int = 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Workflow result — extended with new fix fields
+# ─────────────────────────────────────────────────────────────────────────────
 class WorkflowResult(_Base):
     task: str
     intent: str = ""
@@ -424,6 +521,12 @@ class WorkflowResult(_Base):
     report_path: Optional[str] = None
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # New fields (Fixes 1, 3, 5, 6, 7)
+    structured_fields: Optional[StructuredFields] = None
+    playbook: Optional[PlaybookResult] = None
+    reasoning: Optional[LegalReasoningResult] = None
+    scored_risks: list[RiskScore] = Field(default_factory=list)
+    metrics: Optional[PipelineMetrics] = None
 
     @property
     def ok(self) -> bool:

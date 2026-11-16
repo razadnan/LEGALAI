@@ -239,3 +239,123 @@ def find_risks(ctx: Context) -> list[RiskFinding]:
 def analyze_risks(document_data: DocumentData | dict) -> list[dict]:
     """Standalone entry point: risk findings (as dicts) for a processed document."""
     return [f.model_dump(mode="json") for f in find_risks(build_context(document_data))]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fix 6: Scored risk with rationale, affected party, redline, confidence
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _heuristic_party(explanation: str) -> str:
+    """Guess the affected party from explanation text when no LLM is available."""
+    exp_l = explanation.lower()
+    if any(w in exp_l for w in ("employee", "worker", "staff")):
+        return "Employee"
+    if any(w in exp_l for w in ("employer", "company's right")):
+        return "Employer"
+    if any(w in exp_l for w in ("client", "customer", "buyer")):
+        return "Client"
+    if any(w in exp_l for w in ("provider", "vendor", "supplier", "contractor")):
+        return "Provider"
+    return "Both"
+
+
+def _heuristic_impact(finding: RiskFinding) -> str:
+    sev = finding.severity
+    exp = finding.explanation[:120]
+    if sev == "high":
+        return f"High severity: {exp}. This requires legal review before signing."
+    if sev == "medium":
+        return f"Medium severity: {exp}. Consider negotiating this clause."
+    return f"Low severity: {exp}. Review for completeness."
+
+
+def score_risks_with_rationale(
+    findings: list[RiskFinding],
+    llm=None,
+) -> list[dict]:
+    """Fix 6: Enrich each RiskFinding with:
+      - affected_party (Client / Provider / Both / Employee / Employer)
+      - business_impact (concrete consequence sentence)
+      - exact_quote (verbatim span, up to 300 chars)
+      - confidence (0.0–1.0)
+      - proposed_redline (suggested replacement language)
+
+    Returns list[dict] conforming to RiskScore schema.
+    """
+    import json
+    import re
+    from core.schemas import RiskScore
+
+    if not findings:
+        return []
+
+    scored: list[dict] = []
+
+    for f in findings:
+        ev_text = f.evidence_text if hasattr(f, "evidence_text") else ""
+        confidence = (
+            1.0 if f.verified is True
+            else 0.5 if f.verified is None
+            else 0.3
+        )
+        base = RiskScore(
+            risk_id=f.risk_id,
+            severity=f.severity,
+            clause=f.clause or "",
+            clause_number=f.clause or "",
+            page=f.page,
+            title=getattr(f, "title", f.clause or "Risk"),
+            category=f.category,
+            explanation=f.explanation,
+            exact_quote=ev_text[:300] if ev_text else "",
+            confidence=confidence,
+            proposed_redline="",
+            lawyer_question=f.lawyer_question or "",
+            verified=f.verified,
+            finding_type=f.finding_type,
+        )
+
+        if llm is None:
+            base.affected_party = _heuristic_party(f.explanation)
+            base.business_impact = _heuristic_impact(f)
+            scored.append(base.model_dump())
+            continue
+
+        # LLM enrichment for affected_party, business_impact, confidence, proposed_redline
+        prompt = (
+            f"Enrich this legal risk finding:\n"
+            f"  Clause: {f.clause or 'unknown'}\n"
+            f"  Severity: {f.severity}\n"
+            f"  Explanation: {f.explanation}\n"
+            f"  Evidence quote: {ev_text[:300]}\n\n"
+            "Return JSON ONLY:\n"
+            '{\n'
+            '  "affected_party": "Client"|"Provider"|"Both"|"Employee"|"Employer",\n'
+            '  "business_impact": "one concrete sentence of business consequence",\n'
+            '  "confidence": 0.0-1.0,\n'
+            '  "proposed_redline": "suggested replacement clause text (max 150 words)"\n'
+            '}'
+        )
+        from config.prompts import RISK_SCORING_SYSTEM_PROMPT
+        try:
+            raw = llm(RISK_SCORING_SYSTEM_PROMPT, prompt).strip()
+            raw = re.sub(r"^```(?:json)?\n?", "", raw)
+            raw = re.sub(r"\n?```$", "", raw)
+            data = json.loads(raw)
+            base.affected_party = str(data.get("affected_party", "Both"))
+            base.business_impact = str(data.get("business_impact", ""))
+            base.confidence = float(data.get("confidence", confidence))
+            base.proposed_redline = str(data.get("proposed_redline", ""))
+        except Exception:
+            base.affected_party = _heuristic_party(f.explanation)
+            base.business_impact = _heuristic_impact(f)
+
+        scored.append(base.model_dump())
+
+    return scored
+
+
+def analyze_risks_scored(document_data: DocumentData | dict, llm=None) -> list[dict]:
+    """Returns scored risk findings with rationale, redlines, and confidence (Fix 6)."""
+    findings = find_risks(build_context(document_data))
+    return score_risks_with_rationale(findings, llm=llm)

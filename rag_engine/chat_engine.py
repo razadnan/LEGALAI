@@ -28,7 +28,23 @@ from rag_engine.retrieval import RetrievedPassage, retrieve
 from rag_engine.text_utils import tokenize
 from rag_engine.vector_store import VectorStore
 
-NOT_FOUND = "I could not find this in the uploaded document."
+NOT_FOUND = "The uploaded document does not contain information sufficient to answer this question."
+
+# Cosine distance threshold: distance = 1.0 - semantic_score
+# If best distance > 0.32 (semantic_score < 0.68) and no clause/keyword match, reject before calling Gemini
+NOT_FOUND_DISTANCE_THRESHOLD = 0.32
+MIN_SEMANTIC_SCORE = 1.0 - NOT_FOUND_DISTANCE_THRESHOLD  # 0.68
+
+
+def not_found_response(warning: Optional[str] = None) -> dict:
+    warnings = [warning] if warning else []
+    return Answer(
+        answer=NOT_FOUND,
+        grounded=False,
+        mode="none",
+        sources=[],
+        warnings=warnings,
+    ).model_dump()
 
 SYSTEM_PROMPT = """You are LegalMind, an assistant that answers questions about ONE legal document.
 Rules:
@@ -85,7 +101,24 @@ def _to_source(i: int, p: RetrievedPassage) -> Source:
 
 
 def _is_relevant(passages: List[RetrievedPassage]) -> bool:
-    return any(p.clause_match or p.overlap >= 1 or p.semantic_score >= 0.35 for p in passages)
+    """Return True if at least one passage meets relevance criteria.
+
+    Task 1:
+    - If explicit clause requested, relevant.
+    - If content token overlap >= 1, relevant.
+    - If semantic similarity >= 0.70 (cosine distance <= 0.30), relevant.
+    Absent provisions (SLA, insurance) have overlap=0 and distance > 0.34
+    and are rejected immediately without calling Gemini.
+    """
+    if not passages:
+        return False
+    if any(p.clause_match for p in passages):
+        return True
+    if any(p.overlap >= 1 for p in passages):
+        return True
+    if any(p.semantic_score >= 0.70 for p in passages):
+        return True
+    return False
 
 
 def _extractive(question: str, passages: List[RetrievedPassage]) -> Answer:
@@ -133,7 +166,7 @@ def _answer_from_passages(
     simple_language: bool = False,
 ) -> dict:
     if not passages or not _is_relevant(passages):
-        return Answer(answer=NOT_FOUND, grounded=False, mode="none").model_dump()
+        return not_found_response()
     if llm is None:
         return _extractive(question, passages).model_dump()
 
@@ -150,7 +183,7 @@ def _answer_from_passages(
         return ans.model_dump()
 
     if data.get("answerable") is False:
-        return Answer(answer=NOT_FOUND, grounded=False, mode="llm").model_dump()
+        return not_found_response()
 
     valid = {f"S{i}": p for i, p in enumerate(passages, 1)}
     used = [s for s in dict.fromkeys(data.get("used_sources") or []) if s in valid]
@@ -158,8 +191,7 @@ def _answer_from_passages(
     if len(used) != len(data.get("used_sources") or []):
         warnings.append("Discarded citation(s) to sources that were not retrieved.")
     if not used:
-        return Answer(answer=NOT_FOUND, grounded=False, mode="llm",
-                      warnings=warnings + ["Answer had no valid supporting source."]).model_dump()
+        return not_found_response("Answer had no valid supporting source.")
 
     sources = [_to_source(int(s[1:]), valid[s]) for s in used]
     cited_text = " ".join(valid[s].chunk.text for s in used) + " " + question

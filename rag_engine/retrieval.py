@@ -85,7 +85,12 @@ def retrieve(document_id: str, question: str, top_k: int = 5,
 
     ranked = sorted(fused, key=fused.get, reverse=True)[:top_k]
     best = fused[ranked[0]] if ranked else 1.0
-    qset = set(q_toks)
+    _STOPWORDS = {"a", "an", "the", "in", "on", "at", "to", "for", "of", "and", "or",
+                  "is", "are", "was", "were", "be", "this", "that", "there", "it",
+                  "what", "which", "who", "whom", "how", "why", "when", "where",
+                  "can", "could", "would", "should", "does", "do", "did", "have", "has",
+                  "contract", "agreement", "document", "clause", "section"}
+    qset = set(q_toks) - _STOPWORDS or set(q_toks)
     out = []
     for cid in ranked:
         c = by_id[cid]

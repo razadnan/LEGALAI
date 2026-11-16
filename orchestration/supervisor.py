@@ -16,8 +16,9 @@ from typing import Any, Optional, TypedDict
 from config.settings import Settings, get_settings
 from core.exceptions import InvalidRequestError, LegalMindError
 from core.domain_guard import is_out_of_domain_question
-from core.schemas import (AnswerResult, ComparisonResult, DocumentAnalysis, DocumentInfo, RiskFinding,
-                          TaskType, WorkflowResult)
+from core.schemas import (AnswerResult, ComparisonResult, DocumentAnalysis, DocumentInfo,
+                          LegalReasoningResult, PlaybookResult, RiskFinding, RiskScore,
+                          StructuredFields, TaskType, WorkflowResult)
 from core.state import DocumentRegistry
 from orchestration.adapters import Services
 from orchestration.verification import verify_risks, verify_sources
@@ -50,6 +51,11 @@ class AgentState(TypedDict, total=False):
     errors: list[str]
     warnings: list[str]
     result: Any
+    # Fix 1, 3, 5, 6 — new state fields
+    structured_fields: Optional[StructuredFields]
+    playbook: Optional[PlaybookResult]
+    reasoning: Optional[LegalReasoningResult]
+    scored_risks: list[RiskScore]
 
 
 # --------------------------------------------------------------------------- #
@@ -316,11 +322,58 @@ class SupervisorGraph:
         return {"analysis": analysis}
 
     def _risk_agent(self, state: AgentState) -> dict:
+        from document_intelligence.legal_reasoning import produce_reasoning
+        from document_intelligence.missing_clause_checker import check_missing_clauses
+        from document_intelligence.risk_analyzer import score_risks_with_rationale
+        from document_intelligence.structured_extractor import extract_structured_fields
+        from core.metrics import get_collector
+        from rag_engine.llm import get_llm
+
         doc = self._primary(state)
         analysis = state.get("analysis") or self.registry.get_analysis(doc.document_id)
         risks = list(analysis.risk_findings) if analysis and analysis.risk_findings else self.services.analyze_risks(doc)
         risks, warns = verify_risks(risks, doc)
-        return {"risks": risks, "warnings": _merge(state.get("warnings"), warns), "analysis": analysis}
+
+        llm = get_llm()
+        # For fast unit tests and basic workflows, use deterministic extraction; use LLM for deep auto tasks
+        run_llm = llm if state.get("task") == TaskType.AUTO.value else None
+        collector = get_collector()
+
+        # Fix 1: Structured extraction (separate from retrieval)
+        structured_fields = extract_structured_fields(doc, llm=run_llm)
+        if structured_fields.extraction_confidence > 0:
+            collector.record_extraction(structured_fields.extraction_confidence)
+
+        # Fix 5: Missing-clause playbook check
+        doc_type = analysis.document_type if analysis else "Legal Document"
+        playbook = check_missing_clauses(doc, doc_type, llm=run_llm)
+
+        # Fix 6: Score risks with rationale
+        scored_risks = score_risks_with_rationale(risks, llm=run_llm)
+
+        # Fix 3: Legal reasoning layer
+        passages_text = doc.full_text[:8000]
+        reasoning = produce_reasoning(
+            doc_type=doc_type,
+            extracted_fields=structured_fields,
+            risks=risks,
+            passages_text=passages_text,
+            playbook=playbook,
+            llm=run_llm,
+        )
+
+        # Record risk metrics
+        collector.record_risk_findings(risks)
+
+        return {
+            "risks": risks,
+            "warnings": _merge(state.get("warnings"), warns),
+            "analysis": analysis,
+            "structured_fields": structured_fields,
+            "playbook": playbook,
+            "scored_risks": scored_risks,
+            "reasoning": reasoning,
+        }
 
     def _rag_agent(self, state: AgentState) -> dict:
         doc = self._primary(state)
@@ -337,9 +390,23 @@ class SupervisorGraph:
             simple_language=state.get("simple_language", False),
         )
         sources, warns = verify_sources(answer.sources, doc)
-        if not sources and "could not find" not in answer.answer.lower():
+
+        # Task 2: Strictly filter to verified sources only; if unverified, return not_found
+        verified_sources = [s for s in sources if s.verified is True]
+        if answer.sources and not verified_sources:
+            answer = answer.model_copy(update={
+                "answer": "The uploaded document does not contain information sufficient to answer this question.",
+                "sources": [],
+                "grounded": False,
+                "mode": "none",
+            })
+            warns.append("The cited passage could not be verified on the specified page; returned not_found.")
+        else:
+            answer = answer.model_copy(update={"sources": verified_sources})
+
+        if not verified_sources and "not contain information sufficient" not in answer.answer.lower() and "could not find" not in answer.answer.lower():
             warns.append("The answer has no supporting sources - do not rely on it without checking the document.")
-        return {"answer": answer.model_copy(update={"sources": sources}), "warnings": _merge(state.get("warnings"), warns)}
+        return {"answer": answer, "warnings": _merge(state.get("warnings"), warns)}
 
     def _comparison_agent(self, state: AgentState) -> dict:
         ids = state["document_ids"]

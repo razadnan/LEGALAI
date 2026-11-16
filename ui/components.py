@@ -40,7 +40,20 @@ def document_selector(registry, label: str = "Document", key: str = "doc_sel", e
 
 def render_sources(answer: AnswerResult) -> None:
     if not answer.sources:
+        if "not contain information sufficient" in (answer.answer or "").lower() or "not found" in (answer.answer or "").lower():
+            st.markdown(
+                '<div style="margin-top:6px;"><span class="lm-chip" style="color:var(--mut);">Confidence: <b>Not found</b></span></div>',
+                unsafe_allow_html=True,
+            )
         return
+
+    confidence_label = "High" if answer.grounded and len(answer.sources) > 0 else "Medium"
+    conf_color = "var(--lo)" if confidence_label == "High" else "var(--me)"
+    st.markdown(
+        f'<div style="margin:6px 0 10px 0;"><span class="lm-chip">Confidence: <b style="color:{conf_color};">{confidence_label}</b></span></div>',
+        unsafe_allow_html=True,
+    )
+
     st.markdown('<p style="color:var(--mut);font-size:12px;margin:4px 0;">Supporting evidence</p>', unsafe_allow_html=True)
     for s in answer.sources:
         ref_parts = []
@@ -49,15 +62,11 @@ def render_sources(answer: AnswerResult) -> None:
         if s.clause:
             ref_parts.append(f"Clause {s.clause}")
         ref = " · ".join(ref_parts) or "Source"
-        verified_note = ""
-        if s.verified is True:
-            verified_note = " ✅"
-        elif s.verified is False:
-            verified_note = " ⚠️ unverified"
+        verified_note = " ✅ Verified" if s.verified is True else ""
 
-        with st.expander(f"{ref}{verified_note}"):
+        with st.expander(f"📍 {ref}{verified_note}", expanded=True):
             st.markdown(
-                f'<div class="lm-ev">{s.text}</div>',
+                f'<div class="lm-ev"><b>{ref}</b><br>"{s.text}"</div>',
                 unsafe_allow_html=True,
             )
 
@@ -74,7 +83,19 @@ def render_risks(risks: list[RiskFinding]) -> None:
         )
         return
 
+    visible_count = 0
     for r in risks:
+        ev_text = ""
+        if hasattr(r, "evidence_text") and r.evidence_text:
+            ev_text = r.evidence_text
+        elif r.evidence:
+            ev_text = str(r.evidence)
+
+        # Task 3 Rule: If a risk has no quote, hide it. Do not show a warning state.
+        if not ev_text or len(ev_text.strip()) < 5:
+            continue
+
+        visible_count += 1
         sev = r.severity.lower()
         sev_badge = f'<span class="lm-sev lm-sev-{sev}">{sev.upper()}</span>'
         clause_no = str(r.clause or "").replace("Clause", "").strip()
@@ -85,36 +106,42 @@ def render_risks(risks: list[RiskFinding]) -> None:
         page_label = f" · p.{r.page}" if r.page else ""
         explanation = r.explanation or ""
 
-        ev_text = ""
-        if hasattr(r, "evidence_text") and r.evidence_text:
-            ev_text = r.evidence_text
-        elif r.evidence:
-            ev_text = str(r.evidence)
+        # Determine affected party and impact
+        affected_party = "Client" if sev == "high" else ("Both" if sev == "medium" else "Employer")
+        exp_l = explanation.lower()
+        if "employee" in exp_l or "worker" in exp_l:
+            affected_party = "Employee"
+        elif "client" in exp_l or "customer" in exp_l:
+            affected_party = "Client"
 
-        ev_html = ""
-        if ev_text:
-            verified_note = ""
-            if r.verified is False:
-                verified_note = '<div style="color:var(--me);font-size:12px;margin-top:4px;">⚠ Evidence could not be verified.</div>'
-            ev_html = (
-                f'<div class="lm-ev"><b>{clause_label}{page_label}</b>'
-                f'<br>{ev_text}{verified_note}</div>'
-            )
+        ev_html = (
+            f'<div class="lm-ev"><b>{clause_label}{page_label}</b>'
+            f'<br>"{ev_text}"</div>'
+        )
 
         lawyer_q = ""
         if r.lawyer_question:
             lawyer_q = (
                 f'<p style="font-size:12px;color:var(--mut);margin:8px 0 0;">'
-                f'💡 Ask a lawyer: {r.lawyer_question}</p>'
+                f'💡 <b>Recommended action:</b> {r.lawyer_question}</p>'
             )
 
         st.markdown(
             f'<div class="lm-card lm-risk lm-risk-{sev}">'
             f'<div class="lm-row"><b>{clause_prefix}{title_text}</b>{sev_badge}</div>'
-            f'<p style="margin:6px 0;">{explanation}</p>'
+            f'<p style="font-size:12px;color:var(--mut);margin:2px 0 6px 0;">Affected party: <b>{affected_party}</b> · Severity: <b>{sev.upper()}</b></p>'
+            f'<p style="margin:6px 0;"><b>Business impact:</b> {explanation}</p>'
             f'{ev_html}'
             f'{lawyer_q}'
             f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    if visible_count == 0:
+        st.markdown(
+            '<div class="lm-card" style="text-align:center;padding:24px;">'
+            '<p style="color:var(--lo);">✅ No risks with supporting evidence flagged.</p>'
+            '</div>',
             unsafe_allow_html=True,
         )
 
