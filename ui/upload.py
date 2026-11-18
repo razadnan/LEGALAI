@@ -64,11 +64,10 @@ def render() -> None:
             unsafe_allow_html=True,
         )
 
-        col1, col2 = st.columns([1, 4])
-        with col1:
-            process_btn = st.button("Process document ⚡", type="primary", use_container_width=True)
-
-        if process_btn:
+        already_processed = st.session_state.get("_last_upload") == uploaded.name
+        if not already_processed:
+            st.session_state["_last_upload"] = uploaded.name
+        if not already_processed:
             # Animated steps progress
             steps = [
                 "Extracting text and page numbers",
