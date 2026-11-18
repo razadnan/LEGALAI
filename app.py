@@ -46,7 +46,6 @@ def main() -> None:
         # Logo
         st.markdown(
             '<div class="lm-logo">'
-            '<div class="lm-logo-icon">⚖</div>'
             'LegalMind AI'
             '</div>',
             unsafe_allow_html=True,
