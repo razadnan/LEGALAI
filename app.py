@@ -44,12 +44,7 @@ def main() -> None:
     # ── Sidebar ───────────────────────────────────────────────────────────────
     with st.sidebar:
         # Logo
-        st.markdown(
-            '<div class="lm-logo">'
-            'LegalMind AI'
-            '</div>',
-            unsafe_allow_html=True,
-        )
+        st.image("assets/logo.png", use_container_width=True)
 
         # Current page from session (default = upload)
         if "page" not in st.session_state:
